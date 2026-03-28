@@ -1,6 +1,7 @@
 import pg from "pg";
 import dotenv from "dotenv";
 import express from "express";
+import { z } from "zod";
 
 dotenv.config();
 
@@ -19,6 +20,10 @@ app.use(express.json());
 
 app.listen(3000, (req, res) => {
   console.log("Server is running on port 3000");
+});
+
+app.get("/", (req, res) => {
+  res.send("Welcome to the Gaming Platform API");
 });
 
 app.get("/players-scores", async (req, res) => {
