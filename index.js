@@ -8,12 +8,40 @@ dotenv.config();
 const app = express();
 const { Pool } = pg;
 
+const envschema = z.object({
+  DB_USER: z.string(),
+  DB_HOST: z.string(),
+  DB_DATABASE: z.string(),
+  DB_PASSWORD: z.string(),
+  DB_PORT: z.coerce.number(),
+});
+const validateEnv = envschema.safeParse(process.env);
+
+if (!validateEnv.success) {
+  console.error(
+    "Environment variable validation failed:",
+    z.treeifyError(validateEnv.error),
+  );
+  process.exit(1);
+}
+
+const { DB_USER, DB_HOST, DB_DATABASE, DB_PASSWORD, DB_PORT } =
+  validateEnv.data;
+
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_DATABASE,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+  user: DB_USER,
+  host: DB_HOST,
+  database: DB_DATABASE,
+  password: DB_PASSWORD,
+  port: DB_PORT,
+});
+
+const playerSchema = z.object({
+  name: z
+    .string()
+    .min(2, "Name is required minimum 2 characters")
+    .max(50, "Name must be less than 50 characters"),
+  join_date: z.string(),
 });
 
 app.use(express.json());
@@ -24,6 +52,56 @@ app.listen(3000, (req, res) => {
 
 app.get("/", (req, res) => {
   res.send("Welcome to the Gaming Platform API");
+});
+
+app.post("/players", async (req, res) => {
+  const validateplayer = playerSchema.safeParse(req.body);
+
+  if (!validateplayer.success) {
+    return res.status(400).json({
+      error: validateplayer.error.format(),
+    });
+  }
+
+  const { name, join_date } = validateplayer.data;
+  try {
+    const result = await pool.query(
+      "INSERT INTO players (name, join_date) VALUES ($1, $2) RETURNING *",
+      [name, join_date],
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res
+      .status(400)
+      .json({ error: err.errors ? err.errors[0].message : "Invalid input" });
+  }
+});
+
+app.put("/players/:id", async (req, res) => {
+  const playerId = req.params.id;
+  const validateplayer = playerSchema.safeParse(req.body);
+
+  if (!validateplayer.success) {
+    return res.status(400).json({
+      error: validateplayer.error.format(),
+    });
+  }
+  const { name, join_date } = validateplayer.data;
+  try {
+    const result = await pool.query(
+      "UPDATE players SET name = $1, join_date = $2 WHERE id = $3 RETURNING *",
+      [name, join_date, playerId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Player not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 app.get("/players-scores", async (req, res) => {
